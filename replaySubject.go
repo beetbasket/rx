@@ -7,8 +7,9 @@ import (
 
 type ReplaySubject[T any] struct {
 	lock sync.RWMutex
-	head *Node[T]
-	tail *Node[T]
+	init sync.Once
+	head *node[T]
+	tail *node[T]
 }
 
 func (rs *ReplaySubject[T]) Reset() {
@@ -17,7 +18,7 @@ func (rs *ReplaySubject[T]) Reset() {
 	rs.reset()
 }
 
-func (rs *ReplaySubject[T]) Append(value ...T) {
+func (rs *ReplaySubject[T]) Next(value ...T) {
 	rs.lock.Lock()
 	defer rs.lock.Unlock()
 	for _, v := range value {
@@ -25,12 +26,16 @@ func (rs *ReplaySubject[T]) Append(value ...T) {
 	}
 }
 
-func (rs *ReplaySubject[T]) Iter(ctx context.Context) <-chan T {
+func (rs *ReplaySubject[T]) Subscribe(ctx context.Context) <-chan T {
+	rs.init.Do(func() {
+		rs.lock.Lock()
+		defer rs.lock.Unlock()
+		if rs.head == nil {
+			rs.reset()
+		}
+	})
 	rs.lock.RLock()
 	defer rs.lock.RUnlock()
-	if rs.head == nil {
-		rs.reset()
-	}
 	return rs.head.iter(ctx)
 }
 
@@ -38,7 +43,7 @@ func (rs *ReplaySubject[T]) reset() {
 	rs.append(newNode[T](nil), true)
 }
 
-func (rs *ReplaySubject[T]) append(next *Node[T], replaceHead bool) {
+func (rs *ReplaySubject[T]) append(next *node[T], replaceHead bool) {
 	if rs.head == nil || replaceHead {
 		rs.head = next
 	}

@@ -2,26 +2,28 @@ package rx
 
 import "context"
 
-type Node[T any] struct {
+type node[T any] struct {
 	wait  chan struct{}
-	next  *Node[T]
+	next  *node[T]
 	set   bool
 	value T
+	final bool
 }
 
-func newNode[T any](value *T) *Node[T] {
-	if value == nil {
-		value = new(T)
+func newNode[T any](value *T) *node[T] {
+	v := value
+	if v == nil {
+		v = new(T)
 	}
 
-	return &Node[T]{
+	return &node[T]{
 		wait:  make(chan struct{}),
 		set:   value != nil,
-		value: *value,
+		value: *v,
 	}
 }
 
-func (n *Node[T]) iter(ctx context.Context) <-chan T {
+func (n *node[T]) iter(ctx context.Context) <-chan T {
 	c := make(chan T)
 	if ctx == nil {
 		ctx = context.Background()
@@ -35,6 +37,8 @@ func (n *Node[T]) iter(ctx context.Context) <-chan T {
 					return
 				case c <- n.value:
 				}
+			} else if n.final {
+				return
 			}
 			select {
 			case <-ctx.Done():
